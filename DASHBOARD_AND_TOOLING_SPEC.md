@@ -274,17 +274,6 @@ The real-time view of a scan in progress.
 │  │                                                 [ Pause Feed ] │   │
 │  └───────────────────────────────────────────────────────────────┘   │
 │                                                                      │
-│  ┌─ Runner Log (tail) ──────────────────────────────────────────┐   │
-│  │                                                               │   │
-│  │  [14:23:01] INFO  Phase 1: Health Checks                     │   │
-│  │  [14:23:03] INFO  ✓ All services healthy                     │   │
-│  │  [14:23:03] INFO  Phase 2: DAST Scanning (ZAP)               │   │
-│  │  [14:23:04] INFO  → Starting AJAX Spider on frontend...      │   │
-│  │  [14:47:22] INFO  → AJAX Spider complete (217 URLs)          │   │
-│  │  [14:47:23] INFO  → Starting Active Scan...                  │   │
-│  │                                                 [ Full Log ↗ ] │   │
-│  └───────────────────────────────────────────────────────────────┘   │
-│                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -292,7 +281,6 @@ The real-time view of a scan in progress.
 - **Overall progress bar** is computed by the Security Runner: each phase contributes a weighted percentage (health=2%, DAST=60%, Prowler=20%, Falco=8%, Aggregation=10%).
 - **ZAP Detail** polls the ZAP API through the Security Runner every 5 seconds for spider/scan status.
 - **Falco Live Events** uses a WebSocket connection. The Security Runner tails the Falco JSON log file and pushes new events to the dashboard.
-- **Runner Log** shows the last ~20 lines of the orchestrator log, auto-scrolling.
 - The **[Stop]** button sends a cancel request to the Security Runner, which gracefully stops the current phase, collects partial results, and generates a partial report.
 - Once the scan completes, this page transitions to a "Scan Complete" state with a prominent "View Reports →" button.
 
@@ -346,6 +334,37 @@ Displays the final scan results. This page is accessible after a scan completes,
 │  │                                                               │   │
 │  └───────────────────────────────────────────────────────────────┘   │
 │                                                                      │
+│  ┌─ Falco Report (tab) ──────────────────────────────────────────┐   │
+│  │                                                               │   │
+│  │  Timeline View: Events are shown in chronological order with   │   │
+│  │  priority badges (Critical, Warning, Notice). Each event row   │   │
+│  │  expands to show full Falco JSON context (process, user,      │   │
+│  │  container, command, fd info).                                │   │
+│  │                                                               │   │
+│  │  Summary Panel: Counts by priority, top rules triggered, and   │   │
+│  │  a small heatmap showing event frequency over the scan period. │   │
+│  │                                                               │   │
+│  │  Evidence & Actions: For each event provide:                  │   │
+│  │   • Raw Falco JSON payload                                   │   │
+│  │   • Suggested remediation steps                               │   │
+│  │   • Link to container logs or related ZAP alert if correlated │   │
+│  │                                                               │   │
+│  └───────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  ┌─ Prowler Report (tab) ────────────────────────────────────────┐   │
+│  │                                                               │   │
+│  │  Failed Checks: Lists HIPAA/CIS checks that failed, sorted by  │   │
+│  │  severity. Each row shows the control identifier, description, │   │
+│  │  affected resources, and remediation guidance.                 │   │
+│  │                                                               │   │
+│  │  Passed Checks: Collapsible section showing passed controls    │   │
+│  │  with links to evidence (API responses, resource ARNs).       │   │
+│  │                                                               │   │
+│  │  Export Options: CSV / JSON / HTML export buttons for the full │   │
+│  │  prowler output.                                               │   │
+│  │                                                               │   │
+│  └───────────────────────────────────────────────────────────────┘   │
+│                                                                      │
 │  [ Download JSON ]  [ Download HTML ]  [ Download Full Bundle ]     │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
@@ -354,7 +373,7 @@ Displays the final scan results. This page is accessible after a scan completes,
 **Behaviors:**
 - Three tabs: ZAP, Falco, Prowler. Each tab shows the tool-specific report in a structured, browsable format.
 - **ZAP tab:** Table of alerts, sortable by severity. Clicking a row expands inline to show full alert details. The data is sourced from `zap_report.json`.
-- **Falco tab:** Timeline view of events, color-coded by priority. Highlights the "Test Vulnerability Triggered" event with a special badge to confirm POC validation.
+- **Falco tab:** Timeline view of events, color-coded by priority. Each event expands to show Falco JSON and suggested remediation.
 - **Prowler tab:** Two sub-sections: "Failed Checks" (sorted by severity) and "Passed Checks" (collapsed by default). Each check shows its HIPAA safeguard mapping.
 - **Download buttons:** JSON/HTML per tool, or a "Full Bundle" ZIP containing all reports.
 - A "Scan History" sidebar (or dropdown) lists previous scan runs by timestamp, so the user can compare across runs.
@@ -926,7 +945,7 @@ This plan targets only the Rails backend (`ZAP_TARGET_BACKEND`). It skips the AJ
 
 FROM ghcr.io/zaproxy/zaproxy:stable
 
-LABEL maintainer="HIPAA Security Team <security@hipaackr.org>"
+LABEL maintainer="HIPAA Security Team"
 LABEL description="Custom ZAP image for HIPAA Security Runner POC"
 LABEL version="1.0"
 LABEL org.opencontainers.image.source="https://github.com/HIPAACKR/dynamic-analysis"
@@ -1588,98 +1607,3 @@ docker images | grep hipaackr
 ```
 
 ---
-
-# Appendix A — Full File Tree (Current State)
-
-```
-security-runner-poc/
-├── docker-compose.security-poc.yml         # Updated (new image refs)
-├── scan-config.yaml                        # Unchanged (source of defaults)
-├── run_security_poc.sh                     # Unchanged (CLI fallback)
-├── cleanup_poc.sh                          # Unchanged
-├── DASHBOARD_AND_TOOLING_SPEC.md          # This document
-├── README.md
-├── NEXT_STEPS.md
-├── POC_QUICK_REFERENCE.md
-│
-├── zap-custom/                             # NEW — ZAP custom image build context
-│   ├── Dockerfile
-│   ├── entrypoint.sh
-│   ├── plans/
-│   │   ├── hipaa-full-scan.yaml
-│   │   ├── hipaa-baseline.yaml
-│   │   └── hipaa-api-scan.yaml
-│   └── policies/
-│       └── hipaa-policy.yaml
-│
-├── falco-custom/                           # NEW — Falco custom image build context
-│   ├── Dockerfile
-│   ├── falco.yaml
-│   └── rules.d/
-│       └── hipaa-poc-rules.yaml
-│
-├── prowler-custom/                         # NEW — Prowler custom image build context
-│   ├── Dockerfile
-│   ├── prowler-config.yaml
-│   └── aws-config
-│
-├── zap-config/                             # RETAINED (reference / legacy)
-│   └── scan-policy.yaml
-├── falco-config/                           # RETAINED (reference / legacy)
-│   ├── falco.yaml
-│   └── rules.d/
-│       └── hipaa-poc-rules.yaml
-├── prowler-config/                         # RETAINED (reference / legacy)
-│   └── prowler-config.yaml
-│
-├── security-runner/                        # UPDATED
-│   ├── Dockerfile                          # Updated (add FastAPI/uvicorn)
-│   ├── requirements.txt                    # Updated
-│   ├── runner.py                           # Retained (CLI mode)
-│   ├── app/                                # NEW — API server
-│   │   ├── __init__.py
-│   │   ├── main.py                         # FastAPI entry point
-│   │   ├── scanner.py                      # Refactored scan logic
-│   │   ├── models.py                       # Pydantic models
-│   │   ├── websocket.py                    # WebSocket manager
-│   │   └── config.py                       # Config loader
-│   └── utils/
-│       └── __init__.py
-│
-├── aws-credentials/                        # RETAINED (runtime secrets)
-│   ├── config
-│   ├── credentials                         # Never committed
-│   └── README.md
-│
-├── poc-reports/                            # RETAINED
-│   └── README.md
-│
-└── image-tars/                             # NEW (gitignored) — exported tar files
-    ├── zap-hipaa-scanner-poc.tar.gz
-    ├── falco-hipaa-agent-poc.tar.gz
-    ├── prowler-hipaa-scanner-poc.tar.gz
-    └── security-runner-poc.tar.gz
-```
-
----
-
-# Appendix B — Glossary
-
-| Term | Definition |
-|------|-----------|
-| **Automation Framework** | ZAP's built-in pipeline engine that executes a sequence of scan jobs defined in a YAML plan file. Replaces individual API calls for spider/scan/report. |
-| **Plan File** | A YAML file consumed by the ZAP Automation Framework that defines contexts, jobs (spider, active scan, reports), and their parameters. |
-| **Sidecar Scanning** | Deploying security tools alongside (not inside) the target application on the same infrastructure. |
-| **Security Runner** | The Python orchestrator that coordinates ZAP, Falco, and Prowler, exposes an API for the dashboard, and aggregates reports. |
-| **DAST** | Dynamic Application Security Testing — testing a running application by sending requests and analyzing responses. |
-| **AJAX Spider** | ZAP component that uses a real browser to crawl JavaScript-heavy SPAs (like React/Next.js). |
-| **Falco** | Open-source runtime security tool that monitors Linux syscalls to detect anomalous behavior in containers. |
-| **Prowler** | Open-source AWS security auditing tool that checks compliance against frameworks like HIPAA, CIS, etc. |
-
----
-
-**End of Document**
-
-*This specification serves as the blueprint for two parallel work streams:*
-1. *Frontend team: Build the dashboard UI per Part 1 (framework-agnostic). The backend API (Part 2, Section 2.11) is **implemented** and ready to integrate against.*
-2. *DevOps/Security team: The custom Docker images (Parts 2 & 3) and the upgraded Security Runner API server (Section 2.11) are **implemented**. Build and push the images, then deploy.*
